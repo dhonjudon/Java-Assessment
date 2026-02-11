@@ -21,6 +21,9 @@ public class AdminPanel extends JPanel {
     private JTextField qText, optA, optB, optC, optD;
     private JComboBox<String> correctOpt, diffLevel;
     private JTable reportTable;
+    private JTable questionTable;
+    private DefaultTableModel questionTableModel;
+    private JComboBox<String> filterCategoryCombo;
 
     public AdminPanel(MainFrame frame) {
         this.mainFrame = frame;
@@ -43,6 +46,7 @@ public class AdminPanel extends JPanel {
 
         // Sidebar Buttons
         addSidebarButton("Manage Questions", "AddQuestion", sidebar);
+        addSidebarButton("View/Edit Questions", "ViewEditQuestions", sidebar);
         addSidebarButton("View Reports", "ViewReports", sidebar);
 
         sidebar.add(Box.createVerticalGlue()); // Push logout to bottom
@@ -63,6 +67,7 @@ public class AdminPanel extends JPanel {
 
         contentArea.add(createAddQuestionPanel(), "AddQuestion");
         contentArea.add(createReportPanel(), "ViewReports");
+        contentArea.add(createViewEditQuestionsPanel(), "ViewEditQuestions");
 
         add(contentArea, BorderLayout.CENTER);
     }
@@ -100,6 +105,113 @@ public class AdminPanel extends JPanel {
                     btn.setBackground(Theme.SECONDARY);
             }
         });
+    }
+
+    // --- PANEL 3: VIEW/EDIT QUESTIONS ---
+    private JPanel createViewEditQuestionsPanel() {
+        JPanel wrapper = new JPanel(new BorderLayout());
+        wrapper.setOpaque(false);
+
+        JPanel header = new JPanel(new BorderLayout());
+        header.setOpaque(false);
+        JLabel title = new JLabel("View/Edit Questions");
+        title.setFont(Theme.HEADER_FONT);
+        title.setForeground(Theme.TEXT_DARK);
+
+        filterCategoryCombo = new JComboBox<>(new String[] { "All", "Beginner", "Intermediate", "Advanced" });
+        filterCategoryCombo.addActionListener(e -> loadQuestions());
+        header.add(title, BorderLayout.WEST);
+        header.add(filterCategoryCombo, BorderLayout.EAST);
+        header.setBorder(new EmptyBorder(0, 0, 20, 0));
+        wrapper.add(header, BorderLayout.NORTH);
+
+        String[] columns = { "ID", "Question Text", "A", "B", "C", "D", "Correct", "Category" };
+        questionTableModel = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int col) {
+                return col != 0; // ID is not editable
+            }
+        };
+        questionTable = new JTable(questionTableModel);
+        questionTable.setRowHeight(30);
+        questionTable.setFont(Theme.REGULAR_FONT);
+        questionTable.setShowGrid(false);
+        questionTable.setIntercellSpacing(new Dimension(0, 0));
+
+        JTableHeader th = questionTable.getTableHeader();
+        th.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        th.setBackground(Theme.SECONDARY);
+        th.setForeground(Color.WHITE);
+        th.setPreferredSize(new Dimension(0, 40));
+
+        JScrollPane scroll = new JScrollPane(questionTable);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.getViewport().setBackground(Color.WHITE);
+        wrapper.add(scroll, BorderLayout.CENTER);
+
+        JButton updateBtn = new JButton("Update Selected Question");
+        Theme.styleButton(updateBtn, Theme.SUCCESS);
+        updateBtn.addActionListener(e -> updateSelectedQuestion());
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        btnPanel.setOpaque(false);
+        btnPanel.add(updateBtn);
+        wrapper.add(btnPanel, BorderLayout.SOUTH);
+
+        loadQuestions();
+        return wrapper;
+    }
+
+    private void loadQuestions() {
+        questionTableModel.setRowCount(0);
+        String selectedCategory = (String) filterCategoryCombo.getSelectedItem();
+        try {
+            ResultSet rs;
+            if (selectedCategory.equals("All")) {
+                rs = DBConnection.getAllQuestions();
+            } else {
+                rs = DBConnection.getAllQuestions(); // Filtering in Java for simplicity
+            }
+            while (rs.next()) {
+                String diff = rs.getString("difficulty_level");
+                if (selectedCategory.equals("All") || diff.equals(selectedCategory)) {
+                    questionTableModel.addRow(new Object[] {
+                            rs.getInt("question_id"),
+                            rs.getString("question_text"),
+                            rs.getString("option_a"),
+                            rs.getString("option_b"),
+                            rs.getString("option_c"),
+                            rs.getString("option_d"),
+                            rs.getString("correct_option"),
+                            diff
+                    });
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void updateSelectedQuestion() {
+        int row = questionTable.getSelectedRow();
+        if (row == -1) {
+            JOptionPane.showMessageDialog(this, "Select a question to update.", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        int id = (int) questionTableModel.getValueAt(row, 0);
+        String qText = (String) questionTableModel.getValueAt(row, 1);
+        String a = (String) questionTableModel.getValueAt(row, 2);
+        String b = (String) questionTableModel.getValueAt(row, 3);
+        String c = (String) questionTableModel.getValueAt(row, 4);
+        String d = (String) questionTableModel.getValueAt(row, 5);
+        String correct = (String) questionTableModel.getValueAt(row, 6);
+        String diff = (String) questionTableModel.getValueAt(row, 7);
+        boolean success = DBConnection.updateQuestion(id, qText, a, b, c, d, correct, diff);
+        if (success) {
+            JOptionPane.showMessageDialog(this, "Question updated successfully.");
+            loadQuestions();
+        } else {
+            JOptionPane.showMessageDialog(this, "Failed to update question.", "Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     // --- PANEL 1: ADD QUESTION (Card Style) ---
